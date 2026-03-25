@@ -1,5 +1,6 @@
 import SurplusElement.mathematics.spectral as spec
 import numpy as np
+import scipy.linalg as sp_linalg
 from fontTools.varLib.mutator import prev
 
 l = 10
@@ -9,8 +10,12 @@ n = 20
 D = spec.chebDiffMatrix(matrixSize=n, a=0, b=l)
 I = np.eye(n)
 
-n_e = 1
-N = 10**15
+# n_e = 1
+# N = 10**15
+
+diffC = D.copy()
+diffCV = D.copy()
+diffCI = D.copy()
 
 def chi(C):
     return (C - N + np.sqrt((C - N)**2 + 4 * n_e**2))/(2 * n_e)
@@ -26,12 +31,41 @@ def D_N(chi, C, C_V, C_I):
 
 tau = 0.01
 
-prevChi = chi(prevC)
-nextC = prevC + tau * D @ (
-        D_E(prevChi) * D @ (prevC_V * prevC) +
-        D_F(prevChi) * D @ (prevC_i * prevC) +
-        D_N(prevChi, prevC, prevC_V, prevC_I) * D @ prevC
-)
+prevC = np.ones(n)
 
-D @ (d_V(prevChi) * D @ C_V - v_V * C_V) - k_V(prevChi) * C_V / (l_V)**2 + g_V / (l_V)**2 = 0
-D @ (d_I(prevChi) * D @ C_I - v_I * C_I) - k_I(prevChi) * C_I / (l_I)**2 + g_I / (l_I)**2 = 0
+for i in range(int(T/tau)):
+    prevChi = chi(prevC)
+    """Vacancy concentration calculations"""
+    diffCV = D @ (d_V(prevChi) * D - I @ v_V) + I @ (k_V(prevChi) / (l_V) ** 2)
+    diffCV[0, :] = 0
+    diffCV[-1, :] = 0
+
+    diffCV[0, 0] = alpha_V - const
+    diffCV[-1, -1] = 1.0
+
+    C_V = sp_linalg.solve(diffCV, - g_V / (l_V) ** 2)
+
+    """Interatomic? concentration calculations"""
+    diffCI = D @ (d_I(prevChi) * D - I @ v_I) + I @ (k_I(prevChi) / (l_I) ** 2)
+    diffCI[0, :] = 0
+    diffCI[-1, :] = 0
+
+    diffCI[0, 0] = alpha_I - const
+    diffCI[-1, -1] = 1.0
+
+    C_I = sp_linalg.solve(diffCI, - g_I / (l_I) ** 2)
+    """Concentration equation"""
+    L = D_E(prevChi) * (D @ C_V) + D_F(prevChi) * (D @ C_I)
+    R = D_E(prevChi) * C_V + D_F(prevChi) * C_I + D_N(prevChi, prevC, C_V, C_I)
+
+    diffC = D @ (I @ np.diag(L) + D @ np.diag(R))
+    diffC[0, :] = 0
+    diffC[-1, :] = 0
+
+    diffC[0, :] = K_s * D[0, :]
+
+    nextC = prevC + tau * diffC
+    prevC = nextC
+
+
+
