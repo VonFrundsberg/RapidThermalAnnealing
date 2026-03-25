@@ -36,7 +36,7 @@ prevC = np.ones(n)
 for i in range(int(T/tau)):
     prevChi = chi(prevC)
     """Vacancy concentration calculations"""
-    diffCV = D @ (d_V(prevChi) * D - I @ v_V) + I @ (k_V(prevChi) / (l_V) ** 2)
+    diffCV = D @ (np.diag(D @ d_V(prevChi)) - I @ np.diag(v_V)) + I @ np.diag((k_V(prevChi) / (l_V) ** 2))
     diffCV[0, :] = 0
     diffCV[-1, :] = 0
 
@@ -46,7 +46,7 @@ for i in range(int(T/tau)):
     C_V = sp_linalg.solve(diffCV, - g_V / (l_V) ** 2)
 
     """Interatomic? concentration calculations"""
-    diffCI = D @ (d_I(prevChi) * D - I @ v_I) + I @ (k_I(prevChi) / (l_I) ** 2)
+    diffCI = D @ (D @ np.diag(d_I(prevChi)) - I @ np.diag(v_I)) + I @ np.diag(k_I(prevChi) / (l_I) ** 2)
     diffCI[0, :] = 0
     diffCI[-1, :] = 0
 
