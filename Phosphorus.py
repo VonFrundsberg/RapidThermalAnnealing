@@ -5,11 +5,11 @@ from fontTools.varLib.mutator import prev
 import matplotlib.pyplot as plt
 import time as time
 import pandas as pd
-
+import scipy.interpolate as interp
 """Numerical parameters, matrices and evaluation nodes"""
-l = 10
+l = 0.5
 T = 1
-n = 20
+n = 500
 
 D = spec.chebDiffMatrix(matrixSize=n, a=0, b=l)
 nodes = spec.chebNodes(pointsAmount=n, a=0, b=l)
@@ -29,7 +29,7 @@ EKB = 8.61709715681519*1e-5
 TE = 900
 TE_K = TE + 273.15
 n_e = 1e-12*ENIO*np.exp(-ENIE/(EKB*TE_K))*TE_K**ENIF
-
+K_S = 1.0
 """no idea"""
 C_enh = 1e-12*1.65*1e+23*np.exp(-0.88/(EKB*TE_K))
 
@@ -98,6 +98,8 @@ ga_1 = 1.0
 alpha_2 = 1.0
 beta_2 = -1.0
 ga_2 = 0.0
+V0 = 200.0
+
 def chi(C):
     return (C - N + np.sqrt((C - N)**2 + 4 * n_e**2))/(2 * n_e)
 
@@ -111,41 +113,52 @@ def D_N(chi, C, C_V, C_I):
     return C * (D_E(chi) * C_V + D_F(chi) * C_I) / np.sqrt((C - N)**2 + 4 * n_e**2)
 
 def d_V(x):
-    return x
+    return x*0.0 + 1.0
 def d_I(x):
-    return x
+    return x*0.0 + 1.0
 
 def k_V(x):
-    return x
+    return x*0.0 + 1.0
 def k_I(x):
-    return x
+    return x*0.0 + 1.0
 
-tau = 0.01
+tau = 0.00001
 
-prevC = np.ones(n)
-
+np.set_printoptions(precision=3, suppress=True)
+data = read_data()
+"""1e-12 is a conversion from 1/cm3 -> 1/mum3"""
+# c0 = data[1]*1e-12
+c0 = data[1]
+prevC = interp.interp1d(x=c0[:, 0], y=c0[:, 1], kind="linear", fill_value="extrapolate")(nodes)
+# plt.plot(nodes, prevC)
+# plt.show()
 for i in range(int(T/tau)):
     prevChi = chi(prevC)
+    # plt.plot(nodes, prevChi)
+    # plt.show()
     """Vacancy concentration calculations"""
-    v_V = V0*np.exp[-(nodes-RP)**2/(2*DRP**2)]
+    v_V = V0*np.exp(-(nodes-RP)**2/(2*DRP**2))
     g_V = 1.0 + GIM * np.exp(-(nodes - RP)**2/(2 * DRP**2))
-    diffCV = D @ (np.diag(D @ d_V(prevChi)) - I @ np.diag(v_V)) + I @ np.diag((k_V(prevChi) / (l_V) ** 2))
+    diffCV = D @ (D @ np.diag(d_V(prevChi)) - I @ np.diag(v_V)) - I @ np.diag((k_V(prevChi) / (l_V) ** 2))
     diffCV[0, :] = 0
     diffCV[-1, :] = 0
 
     diffCV[0, :] = ga_1 * D[0, :] - alpha_1 * I[0, :]
+    # print(diffCV)
     diffCV[-1, :] = ga_2 * D[-1, :] - alpha_2 * I[-1, :]
 
     C_V_RHS = - g_V / (l_V) ** 2
     C_V_RHS[0] = beta_1
     C_V_RHS[-1] = beta_2
+    # print(C_V_RHS)
 
     C_V = sp_linalg.solve(diffCV, C_V_RHS)
 
+
     """Interatomic? concentration calculations"""
-    v_I = V0 * np.exp[-(nodes - RP) ** 2 / (2 * DRP ** 2)]
+    v_I = V0 * np.exp(-(nodes - RP) ** 2 / (2 * DRP ** 2))
     g_I = 1.0 + GIM * np.exp(-(nodes - RP) ** 2 / (2 * DRP ** 2))
-    diffCI = D @ (D @ np.diag(d_I(prevChi)) - I @ np.diag(v_I)) + I @ np.diag(k_I(prevChi) / (l_I) ** 2)
+    diffCI = D @ (D @ np.diag(d_I(prevChi)) - I @ np.diag(v_I)) - I @ np.diag(k_I(prevChi) / (l_I) ** 2)
     diffCI[0, :] = 0
     diffCI[-1, :] = 0
 
@@ -161,14 +174,29 @@ for i in range(int(T/tau)):
     L = D_E(prevChi) * (D @ C_V) + D_F(prevChi) * (D @ C_I)
     R = D_E(prevChi) * C_V + D_F(prevChi) * C_I + D_N(prevChi, prevC, C_V, C_I)
 
-    diffC = D @ (I @ np.diag(L) + D @ np.diag(R))
-    diffC[0, :] = 0
-    diffC[-1, :] = 0
+    diffC = (I @ np.diag(L) + np.diag(R) @ D) @ D
+    # print(diffC.shape)
+    # diffC[0, :] *= 0
+    # diffC[-1, :] *= 0
 
-    diffC[0, :] = K_s * D[0, :]
 
-    nextC = prevC + tau * diffC
+
+    A_implicit = I - tau * diffC
+    A_implicit[0, :] = (I @ np.diag(L) + np.diag(R) @ D - K_S * I)[0, :]
+    A_implicit[-1, :] = (I @ np.diag(L) + np.diag(R) @ D)[-1, :]
+    RHS_implicit = prevC
+    RHS_implicit[0] = 0
+    RHS_implicit[-1] = 0
+    nextC = sp_linalg.solve(A_implicit, RHS_implicit)
+    plt.plot(nodes, C_I)
+    plt.plot(nodes, C_V)
+    plt.show()
+    plt.plot(nodes, prevC)
+    plt.plot(nodes, nextC)
+    plt.show()
     prevC = nextC
+
+    # time.sleep(500)
 
 
 
