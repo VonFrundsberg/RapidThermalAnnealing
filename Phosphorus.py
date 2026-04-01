@@ -9,7 +9,7 @@ import scipy.interpolate as interp
 """Numerical parameters, matrices and evaluation nodes"""
 l = 0.5
 T = 1
-n_c = 50
+n_c = 500
 n_d = 500
 D = spec.chebDiffMatrix(matrixSize=n_c, a=0, b=l)
 D2 = D @ D
@@ -49,6 +49,8 @@ DRP = 0.0068
 l_V = 10.0
 l_I = l_V
 GIM = 2.7*1e+4
+RPDRP = 0.015
+X_STAR = 0.02
 def read_data():
     df_c_0 = pd.read_csv('C_T0.dat', sep='\s+', header=None,
                           converters={i: lambda x: float(x.replace('D', 'E'))
@@ -188,11 +190,14 @@ prevC = np.interp(x=nodes, xp=c0[:, 0], fp=c0[:, 1], right=0.0)
 
 def defectsCalculation():
     """Vacancy concentration calculations"""
-    v_V = V0_V * np.exp(-(defectNodes - RP) ** 2 / (2 * DRP ** 2))
-    g_V = 1.0 + GIM * np.exp(-(defectNodes - RP) ** 2 / (2 * DRP ** 2))
+    # v_V = V0_V * np.exp(-(defectNodes - RP) ** 2 / (2 * DRP ** 2))
+
+    # g_V = 1.0 + GIM * np.exp(-(defectNodes - RP) ** 2 / (2 * DRP ** 2))
+    v_V = V0_V * np.exp(-(defectNodes - X_STAR) ** 2 / (2.0 * RPDRP ** 2))
+    g_V = 1.0 + GIM * np.exp(-(defectNodes - X_STAR) ** 2 / (2.0 * RPDRP ** 2))
     diffCV = (defectD2 -
-              np.diag(defectD2 @ v_V) @ defectI - np.diag(v_V) @ defectD2
-              - np.diag((np.ones(defectD2.shape[0]) / (l_V) ** 2))) @ defectI
+              np.diag(defectD @ v_V) @ defectI - np.diag(v_V) @ defectD
+              - np.diag((np.ones(defectD.shape[0]) / (l_V) ** 2))) @ defectI
 
     diffCV[0, :] = ga_1 * defectD[0, :] - alpha_1 * defectI[0, :]
     # print(diffCV)
@@ -206,8 +211,10 @@ def defectsCalculation():
     C_V = sp_linalg.solve(diffCV, C_V_RHS)
 
     """Interatomic? concentration calculations"""
-    v_I = V0_I * np.exp(-(defectNodes - RP) ** 2 / (2 * DRP ** 2))
-    g_I = 1.0 + GIM * np.exp(-(defectNodes - RP) ** 2 / (2 * DRP ** 2))
+    # v_I = V0_I * np.exp(-(defectNodes - RP) ** 2 / (2 * DRP ** 2))
+    # g_I = 1.0 + GIM * np.exp(-(defectNodes - RP) ** 2 / (2 * DRP ** 2))
+    v_I = V0_I * np.exp(-(defectNodes - X_STAR) ** 2 / (2.0 * RPDRP ** 2))
+    g_I = 1.0 + GIM * np.exp(-(defectNodes - X_STAR) ** 2 / (2.0 * RPDRP ** 2))
     diffCI = (defectD2 -
               np.diag((defectD @ v_I)) @ defectI - np.diag(v_I) @ defectD -
               np.diag(np.ones(defectD2.shape[0]) / (l_I) ** 2) @ defectI)
