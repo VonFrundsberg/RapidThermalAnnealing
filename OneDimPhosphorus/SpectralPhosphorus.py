@@ -7,15 +7,15 @@ import time as time
 import pandas as pd
 import scipy.interpolate as interp
 """Numerical parameters, matrices and evaluation nodes"""
-l = 0.5
-T = 1
-n_c = 500
+l = 5
+T = 30
+n_c = 50
 n_d = 500
 D = spec.chebDiffMatrix(matrixSize=n_c, a=0, b=l)
 D2 = D @ D
 
-defectD = spec.chebDiffMatrix(matrixSize=n_d, a=0, b=200)
-defectNodes = spec.chebNodes(pointsAmount=n_d, a=0, b=200)
+defectD = spec.chebDiffMatrix(matrixSize=n_d, a=0, b=l)
+defectNodes = spec.chebNodes(pointsAmount=n_d, a=0, b=l)
 defectD2 = defectD @ defectD
 
 nodes = spec.chebNodes(pointsAmount=n_c, a=0, b=l)
@@ -43,7 +43,7 @@ C_enh = 1e-12*1.65*1e+23*np.exp(-0.88/(EKB*TE_K))
 
 """Defects constants"""
 PLI = 10.0
-# V0 = 200.0
+V0 = 200.0
 RP = 0.0108
 DRP = 0.0068
 l_V = 10.0
@@ -95,17 +95,26 @@ D_F_i = 1.5*1e-7
 alpha, beta, ga are included into the boundary conditions for defects equations
 ga * dc/dx = alpha * c + beta"""
 # V0 = 500.0
-alpha_1 = 1.0
-beta_1_I = -1e-3
-ga_1 = 0.0
-alpha_2 = 1.0
+# alpha_1 = 1.0
+# beta_1_I = -1e-3
+# ga_1 = 0.0
+# alpha_2 = 1.0
 
 # V0 = 3200.0
-alpha_1 = 0.0
-beta_1_V = -10.0
-ga_1 = 1.0
+# alpha_1 = 0.0
+# beta_1_V = -10.0
+# ga_1 = 1.0
+# alpha_2 = 1.0
+# beta_2 = -1.0
+# ga_2 = 0.0
+# V0_I = 200.0
+# V0_V = 0.0
+alpha_1 = 1.0
+ga_1 = 0.0
 alpha_2 = 1.0
 beta_2 = -1.0
+beta_1_I = -1e-3
+beta_1_V = -10.0
 ga_2 = 0.0
 V0_I = 200.0
 V0_V = 0.0
@@ -131,7 +140,7 @@ def k_V(x):
 def k_I(x):
     return x*0.0 + 1.0
 
-tau = 0.01
+tau = 0.1
 
 np.set_printoptions(precision=3, suppress=True)
 data = read_data()
@@ -139,7 +148,7 @@ data = read_data()
 # c0 = data[1]*1e-12
 c0 = data[1]
 # prevC = interp.interp1d(x=c0[:, 0], y=c0[:, 1], kind="linear", fill_value=0.0)(nodes)
-prevC = np.interp(x=nodes, xp=c0[:, 0], fp=c0[:, 1], right=0.0)
+prevC = np.interp(x=nodes, xp=c0[:, 0], fp=1e-12*c0[:, 1], right=0.0)
 # plt.plot(data[0][:, 0], data[0][:, 1], label="C")
 # plt.legend()
 # plt.show()
@@ -237,9 +246,9 @@ plt.plot(nodes, C_I)
 plt.plot(nodes, C_V)
 plt.show()
 
-plt.plot(defectNodes, C_I_large_grid)
-plt.plot(defectNodes, C_V_large_grid)
-plt.show()
+# plt.plot(defectNodes, C_I_large_grid)
+# plt.plot(defectNodes, C_V_large_grid)
+# plt.show()
 for i in range(int(T/tau)):
     prevChi = chi(prevC)
     # plt.plot(nodes, prevChi)
@@ -258,7 +267,8 @@ for i in range(int(T/tau)):
     A_implicit = I - tau * diffC
     # A_implicit[0, :] = (I @ np.diag(L) + np.diag(R) @ D - 1e+21*K_S * I)[0, :]
     A_implicit[0, :] = (np.diag(L) @ I + np.diag(R) @ D - K_S * I)[0, :]
-    A_implicit[-1, :] = (np.diag(L) @ I + np.diag(R) @ D)[-1, :]
+    # A_implicit[-1, :] = (np.diag(L) @ I + np.diag(R) @ D)[-1, :]
+    A_implicit[-1, :] = I[-1, :]
     RHS_implicit = prevC
     RHS_implicit[0] = 0
     RHS_implicit[-1] = 0
@@ -266,12 +276,13 @@ for i in range(int(T/tau)):
     # plt.plot(nodes, C_I)
     # plt.plot(nodes, C_V)
     # plt.show()
-    plt.plot(nodes, prevC)
-    plt.plot(nodes, nextC)
-    plt.show()
+    # plt.plot(nodes, prevC)
+    # plt.plot(nodes, nextC)
+    # plt.show()
     prevC = nextC
 
     # time.sleep(500)
+plt.plot(c0[:, 0], 1e-12*c0[:, 1])
 plt.plot(nodes, nextC)
 plt.show()
 
