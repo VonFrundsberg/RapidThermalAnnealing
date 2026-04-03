@@ -7,10 +7,10 @@ import time as time
 import pandas as pd
 import scipy.interpolate as interp
 """Numerical parameters, matrices and evaluation nodes"""
-l = 5
+l = 1
 T = 30
-n_c = 50
-n_d = 500
+n_c = 1000
+n_d = 1000
 D = spec.chebDiffMatrix(matrixSize=n_c, a=0, b=l)
 D2 = D @ D
 
@@ -149,6 +149,7 @@ data = read_data()
 c0 = data[1]
 # prevC = interp.interp1d(x=c0[:, 0], y=c0[:, 1], kind="linear", fill_value=0.0)(nodes)
 prevC = np.interp(x=nodes, xp=c0[:, 0], fp=1e-12*c0[:, 1], right=0.0)
+# print(prevC[:3])
 # plt.plot(data[0][:, 0], data[0][:, 1], label="C")
 # plt.legend()
 # plt.show()
@@ -203,10 +204,12 @@ def defectsCalculation():
 
     # g_V = 1.0 + GIM * np.exp(-(defectNodes - RP) ** 2 / (2 * DRP ** 2))
     v_V = V0_V * np.exp(-(defectNodes - X_STAR) ** 2 / (2.0 * RPDRP ** 2))
+    v_V[defectNodes < X_STAR] = V0_V
     g_V = 1.0 + GIM * np.exp(-(defectNodes - X_STAR) ** 2 / (2.0 * RPDRP ** 2))
+    g_V[defectNodes < X_STAR] = 1.0 + GIM
     diffCV = (defectD2 -
               np.diag(defectD @ v_V) @ defectI - np.diag(v_V) @ defectD
-              - np.diag((np.ones(defectD.shape[0]) / (l_V) ** 2))) @ defectI
+              - np.diag((np.ones(defectD.shape[0]) / (l_V) ** 2)))
 
     diffCV[0, :] = ga_1 * defectD[0, :] - alpha_1 * defectI[0, :]
     # print(diffCV)
@@ -223,15 +226,20 @@ def defectsCalculation():
     # v_I = V0_I * np.exp(-(defectNodes - RP) ** 2 / (2 * DRP ** 2))
     # g_I = 1.0 + GIM * np.exp(-(defectNodes - RP) ** 2 / (2 * DRP ** 2))
     v_I = V0_I * np.exp(-(defectNodes - X_STAR) ** 2 / (2.0 * RPDRP ** 2))
+    v_I[defectNodes < X_STAR] = V0_I
     g_I = 1.0 + GIM * np.exp(-(defectNodes - X_STAR) ** 2 / (2.0 * RPDRP ** 2))
+    g_I[defectNodes < X_STAR] = 1.0 + GIM
+    # plt.plot(defectNodes, v_I)
+    # plt.plot(defectNodes, g_I)
+    # plt.show()
     diffCI = (defectD2 -
               np.diag((defectD @ v_I)) @ defectI - np.diag(v_I) @ defectD -
-              np.diag(np.ones(defectD2.shape[0]) / (l_I) ** 2) @ defectI)
+              np.diag(np.ones(defectD2.shape[0]) / (l_I) ** 2))
 
     diffCI[0, :] = ga_1 * defectD[0, :] - alpha_1 * defectI[0, :]
     diffCI[-1, :] = ga_2 * defectD[-1, :] - alpha_2 * defectI[-1, :]
 
-    C_I_RHS = - g_I / (l_I) ** 2
+    C_I_RHS = -g_I / (l_I) ** 2
     C_I_RHS[0] = beta_1_I
     C_I_RHS[-1] = beta_2
 
@@ -243,7 +251,7 @@ C_I = np.interp(x=nodes, xp=defectNodes, fp=C_I_large_grid)
 C_V = np.interp(x=nodes, xp=defectNodes, fp=C_V_large_grid)
 
 plt.plot(nodes, C_I)
-plt.plot(nodes, C_V)
+# plt.plot(nodes, C_V)
 plt.show()
 
 # plt.plot(defectNodes, C_I_large_grid)
@@ -257,7 +265,14 @@ for i in range(int(T/tau)):
     L = D_E(prevChi) * (D @ C_V) + D_F(prevChi) * (D @ C_I)
     R = D_E(prevChi) * C_V + D_F(prevChi) * C_I + D_N(prevChi, prevC, C_V, C_I)
 
-    diffC = (np.diag(L) @ I + np.diag(R) @ D) @ D
+    diffC = np.diag(L) @ D + np.diag(R) @ D2
+    # plt.semilogy(nodes, np.abs(L))
+    # plt.semilogy(nodes, np.abs(R))
+    # plt.semilogy(nodes, np.abs(D @ C_V))
+    # plt.semilogy(nodes, np.abs(D @ C_I))
+    # plt.plot(nodes, D_F(prevChi))
+    # plt.plot(nodes, D_E(prevChi))
+    # plt.show()
     # print(diffC.shape)
     # diffC[0, :] *= 0
     # diffC[-1, :] *= 0
@@ -266,18 +281,21 @@ for i in range(int(T/tau)):
 
     A_implicit = I - tau * diffC
     # A_implicit[0, :] = (I @ np.diag(L) + np.diag(R) @ D - 1e+21*K_S * I)[0, :]
-    A_implicit[0, :] = (np.diag(L) @ I + np.diag(R) @ D - K_S * I)[0, :]
+    A_implicit[0, :] = (np.diag(L) @ I + np.diag(R) @ D - 0*K_S * I)[0, :]
     # A_implicit[-1, :] = (np.diag(L) @ I + np.diag(R) @ D)[-1, :]
     A_implicit[-1, :] = I[-1, :]
-    RHS_implicit = prevC
+    RHS_implicit = prevC.copy()
     RHS_implicit[0] = 0
     RHS_implicit[-1] = 0
     nextC = sp_linalg.solve(A_implicit, RHS_implicit)
     # plt.plot(nodes, C_I)
     # plt.plot(nodes, C_V)
     # plt.show()
-    # plt.plot(nodes, prevC)
-    # plt.plot(nodes, nextC)
+    # plt.semilogy(nodes, nextC)
+    # plt.show()
+    # plt.semilogy(nodes[nodes < 0.2], prevC[nodes < 0.2])
+    # plt.semilogy(nodes[nodes < 0.2], nextC[nodes < 0.2])
+    # print(nextC[:30])
     # plt.show()
     prevC = nextC
 
